@@ -2,95 +2,107 @@ const axios = require('axios');
 const fs = require('fs');
 const rubishapi = global.GoatBot.config.rubishapi;
 
-const platformRegexMap = {
-  facebook: /facebook\.com|fb\.watch|www\.facebook\.com/,
-  twitter: /twitter\.com|x\.com/,
-  tiktok: /tiktok\.com/,
-  youtube: /youtube\.com|youtu\.be/,
-  instagram: /instagram\.com/,
-  pinterest: /pinterest\.com|pin\.it/
-};
-
-const platformNames = {
-  facebook: 'Facebook',
-  twitter: 'Twitter',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-  instagram: 'Instagram',
-  pinterest: 'Pinterest'
-};
-
-const detectPlatform = (url) => {
-  for (const [platform, regex] of Object.entries(platformRegexMap)) {
-    if (url.match(regex)) {
-      return platformNames[platform];
-    }
-  }
-  return null;
-};
-
-async function downloadMedia(url) {
-  const path = __dirname + `/cache/alldl.mp4`;
-  let platform = '';
-
-  if (url.match(/facebook\.com|fb\.watch|www\.facebook\.com/)) platform = 'Facebook';
-  else if (url.match(/twitter\.com|x\.com/)) platform = 'Twitter';
-  else if (url.includes('tiktok.com')) platform = 'TikTok';
-  else if (url.match(/youtube\.com|youtu\.be/)) platform = 'YouTube';
-  else if (url.includes('instagram.com')) platform = 'Instagram';
-  else if (url.includes('pin.it')) platform = 'Pinterest';
-  else return { error: 'Unsupported source' }; // Add support for Pinterest
-
-  const BASE_URL = `${rubishapi}/mediadl?url=${encodeURIComponent(url)}&apikey=rubish69`;
-
-  try {
-    const aa = await axios.get(BASE_URL);
-    const bb = aa.data;
-    const vid = (await axios.get(bb.result, { responseType: 'arraybuffer' })).data;
-    fs.writeFileSync(path, Buffer.from(vid, 'utf-8'));
-    return { path, platform };
-  } catch (error) {
-    console.error("Error downloading media:", error);
-    return { error: 'Failed to download media: ' + (error.response?.data?.error || 'Unknown error') };
-  }
-}
-
-
 module.exports = {
   config: {
-    name: "alldl",
-    aliases: ["media"],
-    version: "2",
+    name: "autodl",
+    version: "1.0.0",
     author: "RUBISH",
-    countDown: 5,
+    countDown: 0,
     role: 0,
-    shortDescription: { en: "Download content by link", vn: "Tải nội dung bằng liên kết" },
-    longDescription: { en: "Download content", vn: "Tải nội dung" },
+    shortDescription: {
+      en: "Automatically download videos from various platforms.",
+      vn: "Tự động tải video từ các nền tảng khác nhau."
+    },
+    longDescription: {
+      vn: "Tự động tải video từ TikTok, Facebook, Instagram, YouTube và nhiều nền tảng khác",
+      en: "Auto download video from TikTok, Facebook, Instagram, YouTube, and more"
+    },
     category: "MEDIA",
-    guide: { en: "{pn} link", vn: "{pn} liên kết" }
+    guide: {
+      en: "Just send your link",
+      vn: "Chỉ cần gửi liên kết của bạn"
+    }
   },
 
-  onStart: async function ({ api, event, args }) {
+  onChat: async function ({ api, event }) {
     try {
-      const link = args.join(" ");
-      if (!link) return api.sendMessage("⚠ | Please provide the link.", event.threadID, event.messageID);
+      const url = event.body ? event.body : '';
 
-      api.sendMessage("Processing your request... Please wait.", event.threadID, event.messageID);
-      const { path, platform, error } = await downloadMedia(link);
+      if (isSupportedLink(url)) {
+        api.setMessageReaction("⬇", event.messageID, (err) => {}, true);
 
-      if (error) {
-        return api.sendMessage(`⚠ | ${error}`, event.threadID, event.messageID);
+        const { path, platform, error, result } = await downloadMedia(url);
+
+        if (error) {
+          api.sendMessage(`⚠ | ${error}`, event.threadID, event.messageID);
+          return;
+        }
+
+        if (platform === 'Pinterest') {
+          api.sendMessage(
+            {
+              body: `
+✅ | Successfully Downloaded
+
+Platform ➾${platform}`,
+              attachment: (await axios({ url: result, responseType: 'stream' })).data
+            },
+            event.threadID,
+            event.messageID
+          );
+        } else {
+          api.sendMessage(
+            {
+              body: `
+✅ | Successfully Downloaded
+
+Platform ➾${platform}`,
+              attachment: fs.createReadStream(path)
+            },
+            event.threadID,
+            () => fs.unlinkSync(path),
+            event.messageID
+          );
+        }
       }
-
-      api.sendMessage(
-        { body: `✅ | Successfully Downloaded from ${platform}`, attachment: fs.createReadStream(path) },
-        event.threadID,
-        () => fs.unlinkSync(path),
-        event.messageID
-      );
     } catch (error) {
+      api.sendMessage("⚠ | Error, Please try again later.", event.threadID, event.messageID);
       console.error(error);
-      api.sendMessage("⚠ | Sorry, the content could not be downloaded.", event.threadID, event.messageID);
     }
+  },
+
+  onStart: function () {}
+};
+
+function isSupportedLink(url) {
+  return url.startsWith('https://vt.tiktok.com') ||
+    url.startsWith('https://www.facebook.com') ||
+    url.startsWith('https://www.instagram.com/') ||
+    url.startsWith('https://youtu.be/') ||
+    url.startsWith('https://youtube.com/') ||
+    url.startsWith('https://x.com/') ||
+    url.startsWith('https://twitter.com/') ||
+    url.startsWith('https://vm.tiktok.com') ||
+    url.startsWith('https://fb.watch') ||
+    url.startsWith('https://pin.it') ||
+    url.startsWith('https://pinterest.com');
+}
+
+async function downloadMedia(url) {
+  const path = __dirname + `/cache/auto.mp4`;
+
+  const response = await axios.get(`${rubishapi}/mediadl?url=${encodeURIComponent(url)}&apikey=rubish69`);
+  const { platform, result, error } = response.data;
+
+  if (error) {
+    return { error };
   }
-}; 
+
+  if (platform === 'Pinterest') {
+    return { platform, result };
+  } else {
+    const vid = (await axios.get(result, { responseType: "arraybuffer" })).data;
+    await fs.writeFileSync(path, Buffer.from(vid));
+    return { path, platform };
+  }
+}

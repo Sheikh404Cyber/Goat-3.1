@@ -52,7 +52,7 @@
   "nickNameBot": "🅢🅗🅔🅘🅚🅗-🅡🅞🅑🅞🅣 🅥❸.⓿",
   "prefix": ".",
   "API": "https://noobs-api.onrender.com", 
-  "rubishapi": "https://rubish-apihub.onrender.com/Rubish", 
+  "rubishapi": "https://rubish-apihub.onrender.com/rubish", 
   "database": {
     "type": "sqlite",
     "uriMongodb": "",

@@ -1,108 +1,74 @@
-const axios = require('axios');
-const fs = require('fs');
-const rubishapi = global.GoatBot.config.rubishapi;
+const axios = require("axios");
+const fs = require("fs");
+const { shortenURL } = global.utils;
+const baseApiUrl = async () => {
+  const base = await axios.get(
+    `https://raw.githubusercontent.com/Blankid018/D1PT0/main/baseApiUrl.json`,
+  );
+  return base.data.api;
+};
 
 module.exports = {
   config: {
     name: "autodl",
-    version: "1.0.0",
-    author: "RUBISH",
+    version: "1.0.1",
+    author: "Dipto",
     countDown: 0,
     role: 0,
-    shortDescription: {
-      en: "Automatically download videos from various platforms.",
-      vn: "Tự động tải video từ các nền tảng khác nhau."
+    description: {
+      en: "Auto download video from tiktok, facebook, Instagram, YouTube, and more",
     },
-    longDescription: {
-      vn: "Tự động tải video từ TikTok, Facebook, Instagram, YouTube và nhiều nền tảng khác",
-      en: "Auto download video from TikTok, Facebook, Instagram, YouTube, and more"
-    },
-    category: "MEDIA",
+    category: "media",
     guide: {
-      en: "Just send your link",
-      vn: "Chỉ cần gửi liên kết của bạn"
-    }
+      en: "[video_link]",
+    },
   },
-
+  onStart: async function () {},
   onChat: async function ({ api, event }) {
+    let dipto = event.body ? event.body : "";
+
     try {
-      const url = event.body ? event.body : '';
+      if (
+        dipto.startsWith("https://vt.tiktok.com") ||
+        dipto.startsWith("https://www.tiktok.com/") ||
+        dipto.startsWith("https://www.facebook.com") ||
+        dipto.startsWith("https://www.instagram.com/") ||
+        dipto.startsWith("https://youtu.be/") ||
+        dipto.startsWith("https://youtube.com/") ||
+        dipto.startsWith("https://x.com/") ||
+        dipto.startsWith("https://twitter.com/") ||
+        dipto.startsWith("https://vm.tiktok.com") ||
+        dipto.startsWith("https://fb.watch")
+      ) {
+        api.setMessageReaction("⏳", event.messageID, (err) => {}, true);
 
-      if (isSupportedLink(url)) {
-        api.setMessageReaction("⬇", event.messageID, (err) => {}, true);
+        const path = __dirname + `/cache/diptoo.mp4`;
 
-        const { path, platform, error, result } = await downloadMedia(url);
+        const { data } = await axios.get(
+          `${await baseApiUrl()}/alldl?url=${encodeURIComponent(dipto)}`,
+        );
+        const vid = (
+          await axios.get(data.result, { responseType: "arraybuffer" })
+        ).data;
 
-        if (error) {
-          api.sendMessage(`⚠ | ${error}`, event.threadID, event.messageID);
-          return;
-        }
+        fs.writeFileSync(path, Buffer.from(vid, "utf-8"));
+        const url = await shortenURL(data.result);
+        api.setMessageReaction("✅", event.messageID, (err) => {}, true);
 
-        if (platform === 'Pinterest') {
-          api.sendMessage(
-            {
-              body: `
-✅ | Successfully Downloaded
+        api.sendMessage(
+          {
+            body: `${data.cp || null}\n✅ | Link: ${url || null}`,
 
-Platform ➾${platform}`,
-              attachment: (await axios({ url: result, responseType: 'stream' })).data
-            },
-            event.threadID,
-            event.messageID
-          );
-        } else {
-          api.sendMessage(
-            {
-              body: `
-✅ | Successfully Downloaded
-
-Platform ➾${platform}`,
-              attachment: fs.createReadStream(path)
-            },
-            event.threadID,
-            () => fs.unlinkSync(path),
-            event.messageID
-          );
-        }
+            attachment: fs.createReadStream(path),
+          },
+          event.threadID,
+          () => fs.unlinkSync(path),
+          event.messageID,
+        );
       }
-    } catch (error) {
-      api.sendMessage("⚠ | Error, Please try again later.", event.threadID, event.messageID);
-      console.error(error);
+    } catch (e) {
+      api.setMessageReaction("❎", event.messageID, (err) => {}, true);
+      api.sendMessage(e, event.threadID, event.messageID);
     }
   },
-
-  onStart: function () {}
 };
-
-function isSupportedLink(url) {
-  return url.startsWith('https://vt.tiktok.com') ||
-    url.startsWith('https://www.facebook.com') ||
-    url.startsWith('https://www.instagram.com/') ||
-    url.startsWith('https://youtu.be/') ||
-    url.startsWith('https://youtube.com/') ||
-    url.startsWith('https://x.com/') ||
-    url.startsWith('https://twitter.com/') ||
-    url.startsWith('https://vm.tiktok.com') ||
-    url.startsWith('https://fb.watch') ||
-    url.startsWith('https://pin.it') ||
-    url.startsWith('https://pinterest.com');
-}
-
-async function downloadMedia(url) {
-  const path = __dirname + `/cache/auto.mp4`;
-
-  const response = await axios.get(`${rubishapi}/mediadl?url=${encodeURIComponent(url)}&apikey=rubish69`);
-  const { platform, result, error } = response.data;
-
-  if (error) {
-    return { error };
-  }
-
-  if (platform === 'Pinterest') {
-    return { platform, result };
-  } else {
-    const vid = (await axios.get(result, { responseType: "arraybuffer" })).data;
-    await fs.writeFileSync(path, Buffer.from(vid));
-    return { path, platform };
-  }
-}
